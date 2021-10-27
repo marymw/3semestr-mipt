@@ -1,0 +1,36 @@
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+int main(){
+	int fd;
+	size_t size; 
+	printf("%d\n", __LINE__);
+	char name[]="ccc.fifo";
+
+	(void)umask(0);
+	printf("%d\n", __LINE__);
+	if(mknod(name, S_IFIFO | 0666, 0) < 0){
+		printf("Can\'t create FIFO\n");
+		exit(-1);
+	}
+	printf("%d\n", __LINE__);
+	if((fd = open(name, O_WRONLY)) < 0){
+		printf("Can\'t open FIFO for writing\n");
+		exit(-1);
+	}
+	printf("%d\n", __LINE__);
+	size = write(fd, "Hello, world!", 14);
+	if(size != 14){
+		printf("Can\'t write all string to FIFO\n");
+		exit(-1);
+	}
+	printf("%d\n", __LINE__);
+
+	close(fd);
+	
+	return 0;
+}
