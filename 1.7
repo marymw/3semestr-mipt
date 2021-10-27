@@ -1,0 +1,25 @@
+#include <sys/types.h>
+#include <unistd.h>
+#include <stdio.h>
+int main(int argc, char* argv[], char* envp[])
+{
+	pid_t pid_child;
+	int a = 0;
+	pid_t value_fork = fork();
+	switch (value_fork)
+	{
+		case -1 :
+			printf("Error..\n");
+			break;
+		case 0 :
+			printf("Я ребенок!!\n");
+			(void) execle("./TestProg", "./TestProg", "6.c", NULL, envp);
+
+			printf("Error on program start\n");
+			break;
+		default:
+			printf("Я родитель!!\n");
+	}
+
+	return 0;
+}
