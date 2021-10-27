@@ -1,0 +1,74 @@
+#include <stdlib.h>
+#include <sys/types.h>
+#include <unistd.h>
+#include <stdio.h>
+
+int main(){
+
+	int fd1[2], fd2[2], result;
+	size_t size1, size2;
+	char resstring1[14];
+	char resstring2[25];
+
+	if(pipe(fd1) < 0){
+		printf("Can\'t create first pipe\n");
+		exit(-1);
+	}
+
+	if(pipe(fd2) < 0){
+		printf("Can\'t create second pipe\n");
+		exit(-1);
+	}
+
+	result = fork();
+
+	if(result < 0){
+		printf("Can\'t fork child\n");
+		exit(-1);
+	} 
+	else if (result > 0) {
+
+		close(fd1[0]);
+		close(fd2[1]);
+
+		size1 = write(fd1[1], "Hello, world!", 14);
+		if(size1 != 14){
+			printf("Can\'t write all first string\n");
+			exit(-1);
+		}
+
+		size2 = read(fd2[0], resstring2, 25);
+		if(size2 < 0){
+			printf("Can\'t read second string\n");
+			exit(-1);
+		}
+
+		close(fd1[1]);
+		close(fd2[0]);
+
+		printf("%s\n",resstring2);
+		printf("Parent exit\n");
+	} 
+	else {
+		close(fd1[1]);
+		close(fd2[0]);
+		size1 = read(fd1[0], resstring1, 14);
+		if(size1 < 0){
+			printf("Can\'t read first string\n");
+			exit(-1);
+		}
+
+		size2 = write(fd2[1], "Mary Mary Mary Mary Mary", 25);
+		if(size2 != 25){
+			printf("Can\'t write all second string\n");
+			exit(-1);
+		}
+
+	printf("%s\n",resstring1);
+
+	close(fd1[0]);
+	close(fd2[1]);
+	}
+
+	return 0;
+}
