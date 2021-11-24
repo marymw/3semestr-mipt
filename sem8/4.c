@@ -4,15 +4,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#define MUTEX 0 /* number of sem in semset*/
+#include <string.h>
 
-union semun {
-	int val;
-	struct semid_ds *buf;
-	unsigned short *array;
-};
-
-long getNumber(char *numString) {
+long getNumber(char *numString) 
+{
 
 	if (*numString == '\0') {
 		fprintf(stderr, "empty number argument\n");
@@ -34,44 +29,11 @@ long getNumber(char *numString) {
 
 }
 
-int getSemVal(int semId, int semNum) {
-
-	struct semid_ds ds;
-	union semun arg;
-
-	arg.buf = &ds;
-
-	if (semctl(semId, 0, IPC_STAT, arg) == -1) {
-		perror("semctl");
-		exit(EXIT_FAILURE);
-	}
-
-	arg.array = calloc(ds.sem_nsems, sizeof(arg.array[0]));
-
-	if (arg.array == NULL)
-	{
-		perror("calloc");
-		exit(EXIT_FAILURE);
-	}
-	if (semctl(semId, 0, GETALL, arg) == -1)
-	{
-		perror("se,ctl (GETALL)");
-		exit(EXIT_FAILURE);
-	}
-
-	//fprintf(stderr, "semNum = %d\n", semNum);
-
-	int retval = arg.array[semNum];
-	free(arg.array);
-
-	return retval;
-}
-
 int main(int argc, char *argv[])
 {
-	int fd1[2], fd2[2], isParent;
+	int fd[2], isParent;
 	size_t size;
-	char resstring[14];
+	char resstring[20];
 
 	int semId = semget(IPC_PRIVATE, 1, 0666);
 	
@@ -85,11 +47,7 @@ int main(int argc, char *argv[])
 		exit(EXIT_FAILURE);
 	}
 
-	struct sembuf sops = {
-			.sem_num  = MUTEX,
-			.sem_op  = 1,
-			.sem_flg = 0 };
-
+	struct sembuf sops = { 0, +2, 0 };
 
 	if (semop(semId, &sops, 1) == -1)
 	{
@@ -99,9 +57,15 @@ int main(int argc, char *argv[])
 
 	int parentPid = getpid();
 
-	if (pipe(fd1) == -1)
+	if (pipe(fd) == -1)
 	{
 		perror("Can\'t create pipe\n");
+		exit(EXIT_FAILURE);
+	}
+
+	if ( (size = write(fd[1], "Hi from parent!", strlen("Hi from parent!"))) != strlen("Hi from parent!"))
+	{
+		perror("Can't write string\n");
 		exit(EXIT_FAILURE);
 	}
 
@@ -113,107 +77,100 @@ int main(int argc, char *argv[])
 		exit(EXIT_FAILURE);
 	} 
 	else if (isParent) 
-	{
-		//close(fd1[0]); 	// close read
+	{							
 
-		int retval;
+		int sendMsgLen  = strlen("Hi from parent!");
+		int recMsgLen   = strlen("Mary, Mary, Mary");
 
 		for (int i = 0; i < mary; ++i)
 		{
-			while ( (retval = getSemVal(semId, MUTEX)) != 1) /* there isn't writer turn*/
+			sops.sem_op = 0; // we will wait till value of sem decrease to 0
+
+			if (semop(semId, &sops, 1) == -1)
 			{
-				//printf("Parent: test sleep\n");
-				usleep(10);
+				perror("semop + 1");
+				exit(EXIT_FAILURE);
 			}
 
-			if ( (size = write(fd1[1], "Hello, pussy!", 14)) != 14){
+			//printf("P: after 0\n");
+
+			if ( (size = write(fd[1], "Hi from parent!\0", sendMsgLen)) != sendMsgLen)
+			{
 				perror("Can\'t write all string\n");
 				exit(EXIT_FAILURE);
 			}
 
-			sops.sem_op = +1; // 1 + 1 = 2
-
-			if (semop(semId, &sops, 1) == -1)
-			{
-				perror("semop  +1");
-				exit(EXIT_FAILURE);
-			}
-
-			usleep(1000);
-
-			if ((size = read(fd1[0], resstring, 14)) == -1)
+			if ((size = read(fd[0], resstring, recMsgLen)) == -1)
 			{
 				perror("read");
 				exit(EXIT_FAILURE);
 			}
 		
-			printf("Parent: %s\n", resstring);
+			sops.sem_op = 2;
+
+			printf("Parent: %.*s\n", recMsgLen, resstring);
+
+			//printf("P: +2\n");
+
+			if (semop(semId, &sops, 1) == -1)
+			{
+				perror("semop + 1");
+				exit(EXIT_FAILURE);
+			}
 		}
 
-		close(fd1[1]);
-		close(fd1[0]);
-		
-		//printf("Parent exit\n");
+		close(fd[1]);
+		close(fd[0]);
 	} 
 	else /* Child */
 	{
-		//close(fd1[1]); 	// close write
-
 		sops.sem_op = -1;
-		/*struct sembuf sops = {
-			.sem_num  = MUTEX,
-			.sem_op  = -1,
-			.sem_flg = 0};
-		*/
+
 		int retval;
+
+		int recMsgLen  = strlen("Hi from parent!");
+		int sendMsgLen = strlen("Mary, Mary, Mary");
+
+		//printf( "HI...   = %d\n"
+		//	    "Mary... = %d\n", recMsgLen, sendMsgLen);
 
 		for (int i = 0; i < mary; ++i)
 		{
-
-			while ( (retval = getSemVal(semId, MUTEX)) != 2) /* there isn't writer turn*/
+			if (semop(semId, &sops, 1) == -1)
 			{
-			//	printf("child test sleep\n");
-				usleep(10);
+				perror("semop + 1");
+				exit(EXIT_FAILURE);
 			}
 
-			//printf("before read\n");
+			//printf("C: after -1\n");
 
-			if ((size = read(fd1[0], resstring, 14)) == -1)
+			if ((size = read(fd[0], resstring, recMsgLen)) == -1)
 			{
 				perror("Can\'t read 	string\n");
 				exit(EXIT_FAILURE);
 			}
 
-			//printf("C:before -1");
+			printf("Child: %.*s\n",recMsgLen, resstring);
 
-			if (semop(semId, &sops, 1) == -1)
-			{
-				perror("semop - 1");
-				exit(EXIT_FAILURE);
-			}
-
-			//printf("C:after -1");
-
-			printf("Child: %s\n",resstring);
-
-			usleep(1000);
-
-			//printf("C: before write\n");
-
-			if ( (size = write(fd1[1], "Hello, world!", 14)) != 14)
+			if ( (size = write(fd[1], "Mary, Mary, Mary\0", sendMsgLen)) != sendMsgLen)
 			{
 					perror("Can\'t write all string\n");
 					exit(EXIT_FAILURE);
 			}
 
-			//printf("C: after write\n");
+			//printf("Child: -1\n");
+			
+			if (semop(semId, &sops, 1) == -1)
+			{
+				perror("semop + 2");
+				exit(EXIT_FAILURE);
+			}
 			
 		}
+
 		/* Закрываем входной поток и завершаем работу */
-		close(fd1[0]);
-		close(fd1[1]);
-
-
+		close(fd[0]);
+		close(fd[1]);
 	}
 
 	return EXIT_SUCCESS;
